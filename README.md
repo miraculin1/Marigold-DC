@@ -164,13 +164,13 @@ from (dense) image pixels, guided by sparse depth; rather than as inpainting (sp
 
 ## 🎓 Citation
 ```bibtex
-@misc{viola2024marigolddc,
-    title={Marigold-DC: Zero-Shot Monocular Depth Completion with Guided Diffusion}, 
-    author={Massimiliano Viola and Kevin Qu and Nando Metzger and Bingxin Ke and Alexander Becker and Konrad Schindler and Anton Obukhov},
-    year={2024},
-    eprint={2412.13389},
-    archivePrefix={arXiv},
-    primaryClass={cs.CV},
+@InProceedings{viola2024marigolddc,
+    author    = {Viola, Massimiliano and Qu, Kevin and Metzger, Nando and Ke, Bingxin and Becker, Alexander and Schindler, Konrad and Obukhov, Anton},
+    title     = {Marigold-DC: Zero-Shot Monocular Depth Completion with Guided Diffusion},
+    booktitle = {Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)},
+    month     = {October},
+    year      = {2025},
+    pages     = {5359-5370}
 }
 ```
 
