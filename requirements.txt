@@ -2,8 +2,7 @@ diffusers==0.31.0
 numpy
 pandas
 pillow
-torch
-transformers
+transformers==4.48.0
 accelerate
 tqdm
 numba
@@ -13,3 +12,8 @@ gdown
 imageio
 opencv-python
 pypng
+
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch==2.7.1
+torchvision==0.22.1
+torchaudio==2.7.1

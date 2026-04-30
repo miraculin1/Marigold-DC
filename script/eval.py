@@ -36,7 +36,7 @@ def compute_metrics(pred: np.ndarray, gt: np.ndarray, mask: np.ndarray) -> Dict[
     return {"mae": mae, "rmse": rmse}
 
 
-def evaluate_single_file(pred_path: str, gt_path: str) -> Dict[str, float]:
+def evaluate_single_file(pred_path: str, gt_path: str, eval_max_depth: float) -> Dict[str, float]:
     """
     Evaluate a single prediction file against its ground truth, both in meters.
     Filepath must point to the .npy files. Returns evaluation metrics (mae, rmse).
@@ -48,7 +48,7 @@ def evaluate_single_file(pred_path: str, gt_path: str) -> Dict[str, float]:
         if pred.shape != gt.shape:
             raise ValueError(f"Shape mismatch: pred {pred.shape} vs gt {gt.shape}")
 
-        mask = gt > 0
+        mask = np.isfinite(pred) & np.isfinite(gt) & (gt > 0) & (gt <= eval_max_depth)
 
         if not np.any(mask):
             logging.warning(f"No valid pixels found in {os.path.basename(pred_path)}")
@@ -68,6 +68,7 @@ def main():
     parser.add_argument("--data_dir", type=str, required=True, help="Data directory containing gt/ subdirectory")
     parser.add_argument("--prediction_dir", type=str, required=True, help="Directory containing prediction .npy files")
     parser.add_argument("--output_dir", type=str, required=True, help="Output directory for evaluation results")
+    parser.add_argument("--eval_max_depth", type=float, default=60.0, help="Maximum GT depth included in MAE/RMSE")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -86,7 +87,7 @@ def main():
 
     results = []
     for pred_path, gt_path in tqdm(zip(prediction_files, gt_files), total=len(prediction_files)):
-        metrics = evaluate_single_file(pred_path, gt_path)
+        metrics = evaluate_single_file(pred_path, gt_path, args.eval_max_depth)
         results.append({"filename": os.path.basename(pred_path), "mae": metrics["mae"], "rmse": metrics["rmse"]})
 
     df = pd.DataFrame(results)
