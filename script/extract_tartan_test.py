@@ -38,8 +38,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_samples_per_trajectory", type=int, default=1, help="Maximum samples drawn from one trajectory")
     parser.add_argument("--start_index", type=int, default=0, help="Start index after sorting local trajectory frames")
     parser.add_argument("--sample_stride", type=int, default=1, help="Keep every Nth local trajectory frame")
-    parser.add_argument("--num_beams", type=int, default=64, help="Number of simulated lidar scan lines")
-    parser.add_argument("--points_per_beam", type=int, default=160, help="Maximum sampled points per scan line")
+    parser.add_argument("--sparse_mode", type=str, default="dsec_density", choices=["dsec_density", "lidar_lines"], help="Sparse depth simulation mode")
+    parser.add_argument("--dsec_disparity_dir", type=Path, default=Path("data/dsec"), help="DSEC root used to estimate disparity valid-pixel density")
+    parser.add_argument("--dsec_disparity_source", type=str, default="image", choices=["image", "event"], help="DSEC disparity source used for density")
+    parser.add_argument("--dsec_density_max_files", type=int, default=0, help="Maximum DSEC disparity files used for density; 0 means all")
+    parser.add_argument("--num_beams", type=int, default=32, help="Number of simulated lidar scan lines")
+    parser.add_argument("--points_per_beam", type=int, default=80, help="Maximum sampled points per scan line")
+    parser.add_argument("--horizontal_keep_prob", type=float, default=0.45, help="Probability of keeping each candidate point on a scan line")
     parser.add_argument("--min_depth", type=float, default=0.1, help="Minimum valid depth in meters")
     parser.add_argument("--max_depth", type=float, default=120.0, help="Maximum valid depth in meters")
     parser.add_argument("--vis_min_depth", type=float, default=None, help="Minimum depth for visualization color scaling")
@@ -163,6 +168,8 @@ def write_manifest(path: Path, rows: List[Dict[str, object]]) -> None:
         "trajectory",
         "frame",
         "sparse_points",
+        "sparse_mode",
+        "target_density",
         "status",
     ]
     with path.open("x", newline="") as handle:
@@ -171,10 +178,69 @@ def write_manifest(path: Path, rows: List[Dict[str, object]]) -> None:
         writer.writerows(rows)
 
 
+def estimate_dsec_disparity_density(dsec_root: Path, source: str, max_files: int) -> float:
+    if not dsec_root.exists():
+        raise FileNotFoundError(f"DSEC directory does not exist: {dsec_root}")
+    if max_files < 0:
+        raise ValueError("--dsec_density_max_files must be >= 0")
+
+    files = sorted(dsec_root.glob(f"**/disparity/{source}/*.png"))
+    if max_files > 0:
+        files = files[:max_files]
+    if not files:
+        raise RuntimeError(f"No DSEC disparity PNG files found under {dsec_root}/**/disparity/{source}")
+
+    valid_pixels = 0
+    total_pixels = 0
+    for path in files:
+        disparity = np.asarray(Image.open(path))
+        valid_pixels += int(np.count_nonzero(disparity > 0))
+        total_pixels += int(disparity.size)
+    if total_pixels == 0:
+        raise RuntimeError("DSEC disparity files contain no pixels")
+    density = valid_pixels / total_pixels
+    if density <= 0:
+        raise RuntimeError("Estimated DSEC disparity density is zero")
+    logging.info(
+        "Estimated DSEC %s disparity density: %.6f from %d files",
+        source,
+        density,
+        len(files),
+    )
+    return density
+
+
+def simulate_density_sparse(
+    depth: np.ndarray,
+    target_density: float,
+    min_depth: float,
+    max_depth: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    depth = np.asarray(depth, dtype=np.float32).squeeze()
+    if depth.ndim != 2:
+        raise ValueError(f"Depth must be 2D after squeeze, got shape {depth.shape}")
+    if not 0 < target_density <= 1:
+        raise ValueError("target_density must be in (0, 1]")
+
+    valid = np.isfinite(depth) & (depth >= min_depth) & (depth <= max_depth)
+    sparse = np.zeros_like(depth, dtype=np.float32)
+    valid_indices = np.flatnonzero(valid)
+    if valid_indices.size == 0:
+        return sparse
+
+    target_points = int(round(depth.size * target_density))
+    target_points = min(max(target_points, 1), valid_indices.size)
+    selected = rng.choice(valid_indices, size=target_points, replace=False)
+    sparse.flat[selected] = depth.flat[selected]
+    return sparse
+
+
 def simulate_lidar_sparse(
     depth: np.ndarray,
     num_beams: int,
     points_per_beam: int,
+    horizontal_keep_prob: float,
     min_depth: float,
     max_depth: float,
     rng: np.random.Generator,
@@ -187,6 +253,8 @@ def simulate_lidar_sparse(
     sparse = np.zeros_like(depth, dtype=np.float32)
     if not np.any(valid):
         return sparse
+    if not 0 < horizontal_keep_prob <= 1:
+        raise ValueError("--horizontal_keep_prob must be in (0, 1]")
 
     height, width = depth.shape
     beam_count = min(max(num_beams, 1), height)
@@ -203,7 +271,16 @@ def simulate_lidar_sparse(
         if valid_cols.size <= per_row:
             cols = valid_cols
         else:
-            cols = np.sort(rng.choice(valid_cols, size=per_row, replace=False))
+            base_cols = np.linspace(valid_cols.min(), valid_cols.max(), per_row).round().astype(np.int64)
+            jitter = max(width // max(per_row * 6, 1), 1)
+            cols = np.clip(base_cols + rng.integers(-jitter, jitter + 1, size=base_cols.shape), 0, width - 1)
+            cols = cols[valid[row, cols]]
+            if cols.size == 0:
+                continue
+        keep = rng.random(cols.shape[0]) < horizontal_keep_prob
+        cols = np.unique(cols[keep])
+        if cols.size == 0:
+            cols = np.array([rng.choice(valid_cols)], dtype=np.int64)
         sparse[row, cols] = depth[row, cols]
     return sparse
 
@@ -270,6 +347,13 @@ def main() -> int:
 
     vis_min = args.vis_min_depth if args.vis_min_depth is not None else args.min_depth
     vis_max = args.vis_max_depth if args.vis_max_depth is not None else args.max_depth
+    target_density = None
+    if args.sparse_mode == "dsec_density":
+        target_density = estimate_dsec_disparity_density(
+            args.dsec_disparity_dir,
+            args.dsec_disparity_source,
+            args.dsec_density_max_files,
+        )
 
     for index, (image_path, depth_path) in tqdm(list(enumerate(pairs)), desc="Extracting"):
         basename = sample_name(image_path, args.tartan_root)
@@ -301,14 +385,26 @@ def main() -> int:
 
                 gt[~np.isfinite(gt)] = 0.0
                 rng = np.random.default_rng(args.seed + index)
-                sparse = simulate_lidar_sparse(
-                    gt,
-                    args.num_beams,
-                    args.points_per_beam,
-                    args.min_depth,
-                    args.max_depth,
-                    rng,
-                )
+                if args.sparse_mode == "dsec_density":
+                    if target_density is None:
+                        raise RuntimeError("DSEC target density was not estimated")
+                    sparse = simulate_density_sparse(
+                        gt,
+                        target_density,
+                        args.min_depth,
+                        args.max_depth,
+                        rng,
+                    )
+                else:
+                    sparse = simulate_lidar_sparse(
+                        gt,
+                        args.num_beams,
+                        args.points_per_beam,
+                        args.horizontal_keep_prob,
+                        args.min_depth,
+                        args.max_depth,
+                        rng,
+                    )
                 if not np.any(sparse > 0):
                     raise ValueError("Sparse simulation produced no valid points")
 
@@ -337,6 +433,8 @@ def main() -> int:
                 "trajectory": metadata["trajectory"],
                 "frame": metadata["frame"],
                 "sparse_points": sparse_points,
+                "sparse_mode": args.sparse_mode,
+                "target_density": target_density if target_density is not None else "",
                 "status": status,
             })
         except Exception as exc:

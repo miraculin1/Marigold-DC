@@ -21,7 +21,7 @@ set -euo pipefail
 #   DISP_SCALE               Disparity png scale (default 256.0 for DSEC)
 #   CHECKPOINT               Marigold checkpoint
 #   STEPS / ENSEMBLE / PROC_RES
-#   VIZ_EVERY / VIZ_ALPHA / VIZ_PERCENTILE
+#   VIZ_EVERY / VIZ_ALPHA / VIZ_PERCENTILE (used by overlay visualization step)
 #   USE_FULL_PRECISION       0 or 1
 #
 # Usage:
@@ -71,16 +71,26 @@ cmd=(
   --processing_resolution "${PROC_RES}"
   --num_bins "${NUM_BINS}"
   --disparity_scale "${DISP_SCALE}"
-  --viz_every "${VIZ_EVERY}"
-  --viz_alpha "${VIZ_ALPHA}"
-  --viz_percentile "${VIZ_PERCENTILE}"
 )
 
 if [[ "${USE_FULL_PRECISION}" == "1" ]]; then
   cmd+=(--use_full_precision)
 fi
 
-echo "Running:"
-printf ' %q' "${cmd[@]}"
+# echo "Running:"
+# printf ' %q' "${cmd[@]}"
+# echo
+# "${cmd[@]}"
+
+viz_cmd=(
+  python script/generate_dsec_overlay_viz.py
+  --output_dir "${OUTPUT_DIR}"
+  --viz_every "${VIZ_EVERY}"
+  --viz_alpha "${VIZ_ALPHA}"
+  --viz_percentile "${VIZ_PERCENTILE}"
+)
+
+echo "Running visualization:"
+printf ' %q' "${viz_cmd[@]}"
 echo
-"${cmd[@]}"
+"${viz_cmd[@]}"

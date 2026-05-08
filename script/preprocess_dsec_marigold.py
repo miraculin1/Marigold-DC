@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 from typing import Tuple
 
-import cv2
 import h5py
 import hdf5plugin
 import numpy as np
@@ -221,67 +220,6 @@ def event_slice_to_voxel(
     return to_voxel_grid_numpy(ev, num_bins=num_bins, width=width, height=height)
 
 
-def colorize_depth(depth_event: np.ndarray) -> np.ndarray:
-    valid = depth_event > 0
-    out = np.zeros_like(depth_event, dtype=np.float32)
-    if np.any(valid):
-        vals = depth_event[valid]
-        vmin = float(np.percentile(vals, 1.0))
-        vmax = float(np.percentile(vals, 99.0))
-        if vmax <= vmin:
-            vmax = vmin + 1e-6
-        out[valid] = np.clip((vals - vmin) / (vmax - vmin), 0.0, 1.0)
-    out_u8 = (out * 255.0).astype(np.uint8)
-    return cv2.applyColorMap(out_u8, cv2.COLORMAP_TURBO)
-
-
-def colorize_voxel_energy(voxel: np.ndarray, percentile: float) -> np.ndarray:
-    energy = np.abs(voxel).sum(axis=0)
-    vmax = float(np.percentile(energy, percentile))
-    if vmax <= 0:
-        vmax = 1.0
-    norm = np.clip(energy / vmax, 0.0, 1.0)
-    norm_u8 = (norm * 255.0).astype(np.uint8)
-    return cv2.applyColorMap(norm_u8, cv2.COLORMAP_HOT)
-
-
-def save_overlay_viz(
-    depth_event: np.ndarray,
-    voxel: np.ndarray,
-    out_path: Path,
-    alpha: float,
-    percentile: float,
-    frame_id: str,
-    t0: int,
-    t1: int,
-    event_count: int,
-) -> None:
-    depth_color = colorize_depth(depth_event)
-    voxel_color = colorize_voxel_energy(voxel, percentile=percentile)
-    blend = cv2.addWeighted(depth_color, 1.0 - alpha, voxel_color, alpha, 0.0)
-    cv2.putText(
-        blend,
-        f"frame={frame_id} t0={t0} t1={t1} events={event_count}",
-        (8, 22),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        (255, 255, 255),
-        2,
-        cv2.LINE_AA,
-    )
-    cv2.putText(
-        blend,
-        f"frame={frame_id} t0={t0} t1={t1} events={event_count}",
-        (8, 22),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.55,
-        (0, 0, 0),
-        1,
-        cv2.LINE_AA,
-    )
-    cv2.imwrite(str(out_path), blend)
-
-
 def main():
     parser = argparse.ArgumentParser("DSEC preprocess: Marigold depth + projection + event voxel")
     parser.add_argument("--left_rgb_dir", type=Path, required=True)
@@ -313,9 +251,6 @@ def main():
     parser.add_argument("--num_bins", type=int, default=5, help="Follow convert_tartan.py default NBINS=5")
     parser.add_argument("--event_width", type=int, required=True)
     parser.add_argument("--event_height", type=int, required=True)
-    parser.add_argument("--viz_every", type=int, default=5, help="Save overlay every N voxel frames")
-    parser.add_argument("--viz_alpha", type=float, default=0.45, help="Voxel overlay alpha")
-    parser.add_argument("--viz_percentile", type=float, default=99.0, help="Voxel normalization percentile")
     parser.add_argument("--use_full_precision", action="store_true")
     args = parser.parse_args()
 
@@ -323,7 +258,6 @@ def main():
     (args.output_dir / "depth_event").mkdir(parents=True, exist_ok=True)
     (args.output_dir / "voxel").mkdir(parents=True, exist_ok=True)
     (args.output_dir / "depth_left_dense").mkdir(parents=True, exist_ok=True)
-    (args.output_dir / "viz_overlay").mkdir(parents=True, exist_ok=True)
 
     if args.cam_to_cam_yaml is not None:
         k_left, k_event, t_event_from_left, baseline_m = load_dsec_calibration(args.cam_to_cam_yaml)
@@ -420,19 +354,6 @@ def main():
                 f.create_dataset("t0_ns", data=np.array([t0], dtype=np.int64))
                 f.create_dataset("t1_ns", data=np.array([t1], dtype=np.int64))
                 f.create_dataset("t_disp_ns", data=np.array([int(ts)], dtype=np.int64))
-
-            if args.viz_every > 0 and (i % args.viz_every == 0):
-                save_overlay_viz(
-                    depth_event=depth_event,
-                    voxel=voxel,
-                    out_path=args.output_dir / "viz_overlay" / f"{stem}.png",
-                    alpha=float(args.viz_alpha),
-                    percentile=float(args.viz_percentile),
-                    frame_id=stem,
-                    t0=t0,
-                    t1=t1,
-                    event_count=event_count,
-                )
 
         pbar.set_postfix(frame=stem)
 

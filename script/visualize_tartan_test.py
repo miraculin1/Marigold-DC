@@ -211,9 +211,9 @@ def main() -> int:
         key = cv2.waitKeyEx(0)
         if key in (ord("q"), 27):
             break
-        if key in (ord("n"), 83, 2555904):
+        if key in (ord("n"), ord("l"), ord("j"), 83, 2555904):
             index = (index + 1) % len(samples)
-        elif key in (ord("p"), 81, 2424832):
+        elif key in (ord("p"), ord("h"), ord("k"), 81, 2424832):
             index = (index - 1) % len(samples)
         elif key == ord("s"):
             path = unique_screenshot_path(args.save_dir, stem)

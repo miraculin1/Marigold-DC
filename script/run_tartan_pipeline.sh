@@ -21,8 +21,13 @@ set -euo pipefail
 #   MAX_SAMPLES_PER_TRAJECTORY  default: 1
 #   START_INDEX                 default: 0
 #   SAMPLE_STRIDE               default: 1
-#   NUM_BEAMS                   default: 64
-#   POINTS_PER_BEAM             default: 160
+#   SPARSE_MODE                 default: dsec_density
+#   DSEC_DISPARITY_DIR          default: data/dsec
+#   DSEC_DISPARITY_SOURCE       default: image
+#   DSEC_DENSITY_MAX_FILES      default: 0, use all disparity PNGs
+#   NUM_BEAMS                   default: 32
+#   POINTS_PER_BEAM             default: 80
+#   HORIZONTAL_KEEP_PROB        default: 0.45
 #   MIN_DEPTH                   default: 0.1
 #   MAX_DEPTH                   default: 120.0
 #   VIS_MIN_DEPTH               default: empty, use MIN_DEPTH
@@ -55,8 +60,13 @@ MAX_SAMPLES=${MAX_SAMPLES:-100}
 MAX_SAMPLES_PER_TRAJECTORY=${MAX_SAMPLES_PER_TRAJECTORY:-1}
 START_INDEX=${START_INDEX:-0}
 SAMPLE_STRIDE=${SAMPLE_STRIDE:-1}
-NUM_BEAMS=${NUM_BEAMS:-64}
-POINTS_PER_BEAM=${POINTS_PER_BEAM:-160}
+SPARSE_MODE=${SPARSE_MODE:-dsec_density}
+DSEC_DISPARITY_DIR=${DSEC_DISPARITY_DIR:-data/dsec}
+DSEC_DISPARITY_SOURCE=${DSEC_DISPARITY_SOURCE:-image}
+DSEC_DENSITY_MAX_FILES=${DSEC_DENSITY_MAX_FILES:-0}
+NUM_BEAMS=${NUM_BEAMS:-32}
+POINTS_PER_BEAM=${POINTS_PER_BEAM:-80}
+HORIZONTAL_KEEP_PROB=${HORIZONTAL_KEEP_PROB:-0.45}
 MIN_DEPTH=${MIN_DEPTH:-0.1}
 MAX_DEPTH=${MAX_DEPTH:-120.0}
 VIS_MIN_DEPTH=${VIS_MIN_DEPTH:-}
@@ -80,8 +90,13 @@ extract_args=(
   --max_samples_per_trajectory "${MAX_SAMPLES_PER_TRAJECTORY}"
   --start_index "${START_INDEX}"
   --sample_stride "${SAMPLE_STRIDE}"
+  --sparse_mode "${SPARSE_MODE}"
+  --dsec_disparity_dir "${DSEC_DISPARITY_DIR}"
+  --dsec_disparity_source "${DSEC_DISPARITY_SOURCE}"
+  --dsec_density_max_files "${DSEC_DENSITY_MAX_FILES}"
   --num_beams "${NUM_BEAMS}"
   --points_per_beam "${POINTS_PER_BEAM}"
+  --horizontal_keep_prob "${HORIZONTAL_KEEP_PROB}"
   --min_depth "${MIN_DEPTH}"
   --max_depth "${MAX_DEPTH}"
   --seed "${SEED}"
@@ -125,7 +140,7 @@ if [[ "${EVAL_ONLY}" == "1" ]]; then
 fi
 
 echo "Extracting Tartan test data..."
-python script/extract_tartan_test.py "${extract_args[@]}"
+# python script/extract_tartan_test.py "${extract_args[@]}"
 
 echo "Running Marigold-DC and evaluating..."
 python script/run_tartan_test.py "${run_args[@]}"
