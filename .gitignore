@@ -3,3 +3,4 @@ data/dense*
 *.pyc
 venv
 .vscode
+.codex

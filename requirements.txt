@@ -12,6 +12,7 @@ gdown
 imageio
 opencv-python
 pypng
+hdf5plugin
 
 --extra-index-url https://download.pytorch.org/whl/cu118
 torch==2.7.1

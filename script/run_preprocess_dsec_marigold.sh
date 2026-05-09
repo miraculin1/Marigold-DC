@@ -39,6 +39,7 @@ RGB_DIR="${RGB_DIR:-${SEQ_ROOT}/images_rectified_left}"
 DISP_DIR="${DISP_DIR:-${SEQ_ROOT}/disparity_image}"
 RGB_TS="${RGB_TS:-${SEQ_ROOT}/interlaken_00_c_image_timestamps.txt}"
 DISP_TS="${DISP_TS:-${SEQ_ROOT}/interlaken_00_c_disparity_timestamps.txt}"
+RECTIFY_MAP="${RECTIFY_MAP:-${SEQ_ROOT}/events_left/rectify_map.h5}"
 
 EVENT_WIDTH="${EVENT_WIDTH:-640}"
 EVENT_HEIGHT="${EVENT_HEIGHT:-480}"
@@ -55,7 +56,7 @@ VIZ_PERCENTILE="${VIZ_PERCENTILE:-99.0}"
 USE_FULL_PRECISION="${USE_FULL_PRECISION:-0}"
 
 cmd=(
-  python script/preprocess_dsec_marigold.py
+  python script/preprocess_dsec_marigold_new.py
   --left_rgb_dir "${RGB_DIR}"
   --disparity_dir "${DISP_DIR}"
   --events_h5 "${EVENTS_H5}"
@@ -71,16 +72,17 @@ cmd=(
   --processing_resolution "${PROC_RES}"
   --num_bins "${NUM_BINS}"
   --disparity_scale "${DISP_SCALE}"
+  --rectify_map_h5 "${RECTIFY_MAP}"
 )
 
 if [[ "${USE_FULL_PRECISION}" == "1" ]]; then
   cmd+=(--use_full_precision)
 fi
 
-# echo "Running:"
-# printf ' %q' "${cmd[@]}"
-# echo
-# "${cmd[@]}"
+echo "Running:"
+printf ' %q' "${cmd[@]}"
+echo
+"${cmd[@]}"
 
 viz_cmd=(
   python script/generate_dsec_overlay_viz.py
