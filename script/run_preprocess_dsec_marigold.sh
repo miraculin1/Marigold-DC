@@ -119,10 +119,8 @@ if [[ -n "${DSEC_ROOT}" ]]; then
 
   for scene_dir in "${scenes[@]}"; do
     [[ -d "${scene_dir}" ]] || continue
-    echo "${scene_dir}"
-    # run_one_scene "${scene_dir}"
+    run_one_scene "${scene_dir}"
   done
 else
-  echo "${SEQ_ROOT}"
-  # run_one_scene "${SEQ_ROOT}"
+  run_one_scene "${SEQ_ROOT}"
 fi
